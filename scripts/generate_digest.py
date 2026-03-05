@@ -577,14 +577,24 @@ def upload_release_asset(
         "Authorization": f"token {github_token}",
         "Content-Type": "audio/mpeg",
     }
-    resp = requests.post(
-        f"{upload_url_base}?name={filename}",
-        headers=headers,
-        data=content,
-        timeout=120,
-    )
-    resp.raise_for_status()
-    return resp.json()["browser_download_url"]
+    url = f"{upload_url_base}?name={filename}"
+    max_attempts = 4
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = requests.post(
+                url,
+                headers=headers,
+                data=content,
+                timeout=300,
+            )
+            resp.raise_for_status()
+            return resp.json()["browser_download_url"]
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+            if attempt == max_attempts:
+                raise
+            wait = 10 * (2 ** (attempt - 1))  # 10s, 20s, 40s
+            print(f"    Upload attempt {attempt} failed ({exc.__class__.__name__}), retrying in {wait}s...")
+            time.sleep(wait)
 
 
 # ── Email builder ──────────────────────────────────────────────────────────────
