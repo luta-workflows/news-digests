@@ -6,7 +6,7 @@ Runs in GitHub Actions every Monday morning.
 Produces two digests (CS Leadership & CTO/Engineering), each with:
   - A short HTML email summary with top stories
   - A full structured HTML document attachment (links preserved)
-  - An MP3 podcast audio file hosted on GitHub Releases
+  - An MP3 podcast audio file hosted on DigitalOcean Spaces
 
 News research uses Tavily Search API (real-time web search, last 7 days).
 Content generation, podcast scripting, and TTS use OpenAI.
@@ -527,74 +527,38 @@ def markdown_to_html(md_text: str, title: str) -> str:
 </html>"""
 
 
-# ── GitHub Release helpers ─────────────────────────────────────────────────────
+# ── DigitalOcean Spaces helpers ────────────────────────────────────────────────
 
-def get_or_create_github_release(week_date: str, github_token: str, repo: str) -> tuple[int, str]:
-    """Return (release_id, upload_url_base), creating the release if needed."""
-    tag = f"digest-{week_date}"
-    headers = {
-        "Authorization": f"token {github_token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-
-    resp = requests.get(
-        f"https://api.github.com/repos/{repo}/releases/tags/{tag}",
-        headers=headers,
-        timeout=30,
-    )
-    if resp.ok:
-        data = resp.json()
-        return data["id"], data["upload_url"].split("{")[0]
-
-    resp = requests.post(
-        f"https://api.github.com/repos/{repo}/releases",
-        headers=headers,
-        json={
-            "tag_name": tag,
-            "name": f"Weekly AI Digest – Week of {WEEK_DISPLAY}",
-            "body": (
-                f"Auto-generated weekly AI digests for the week of {WEEK_DISPLAY}.\n\n"
-                "This release contains the podcast-style audio files for both digests."
-            ),
-            "prerelease": False,
-        },
-        timeout=30,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return data["id"], data["upload_url"].split("{")[0]
-
-
-def upload_release_asset(
-    release_id: int,
-    upload_url_base: str,
-    filename: str,
+def upload_to_spaces(
     content: bytes,
-    github_token: str,
+    filename: str,
+    spaces_key: str,
+    spaces_secret: str,
+    spaces_region: str,
+    spaces_bucket: str,
+    folder: str = "blog-public-content",
 ) -> str:
-    """Upload a file to a GitHub Release. Returns the browser download URL."""
-    headers = {
-        "Authorization": f"token {github_token}",
-        "Content-Type": "audio/mpeg",
-    }
-    url = f"{upload_url_base}?name={filename}"
-    max_attempts = 4
-    for attempt in range(1, max_attempts + 1):
-        try:
-            resp = requests.post(
-                url,
-                headers=headers,
-                data=content,
-                timeout=300,
-            )
-            resp.raise_for_status()
-            return resp.json()["browser_download_url"]
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
-            if attempt == max_attempts:
-                raise
-            wait = 10 * (2 ** (attempt - 1))  # 10s, 20s, 40s
-            print(f"    Upload attempt {attempt} failed ({exc.__class__.__name__}), retrying in {wait}s...")
-            time.sleep(wait)
+    """Upload audio bytes to DigitalOcean Spaces. Returns the public CDN URL."""
+    import boto3
+    from botocore.client import Config
+
+    client = boto3.client(
+        "s3",
+        region_name=spaces_region,
+        endpoint_url=f"https://{spaces_region}.digitaloceanspaces.com",
+        aws_access_key_id=spaces_key,
+        aws_secret_access_key=spaces_secret,
+        config=Config(signature_version="s3v4"),
+    )
+    object_key = f"{folder}/{filename}"
+    client.put_object(
+        Bucket=spaces_bucket,
+        Key=object_key,
+        Body=content,
+        ContentType="audio/mpeg",
+        ACL="public-read",
+    )
+    return f"https://{spaces_bucket}.{spaces_region}.digitaloceanspaces.com/{object_key}"
 
 
 # ── Email builder ──────────────────────────────────────────────────────────────
@@ -673,13 +637,13 @@ def send_email(
 
 def run_digest(
     digest_type: str,
-    github_token: str,
-    github_repo: str,
     gmail_user: str,
     gmail_password: str,
     recipient: str,
-    release_id: int,
-    upload_url_base: str,
+    spaces_key: str,
+    spaces_secret: str,
+    spaces_region: str,
+    spaces_bucket: str,
 ) -> None:
     label = "CS Leadership" if digest_type == "cs" else "CTO/Engineering"
     print(f"\n{'=' * 55}")
@@ -706,9 +670,12 @@ def run_digest(
     print("\n[5/7] Generating TTS audio...")
     audio_bytes = generate_audio(podcast_script)
 
-    print("\n[6/7] Uploading audio to GitHub Release...")
+    print("\n[6/7] Uploading audio to DigitalOcean Spaces...")
     audio_filename = f"digest-{'cs' if digest_type == 'cs' else 'cto'}-{WEEK_DATE}.mp3"
-    audio_url = upload_release_asset(release_id, upload_url_base, audio_filename, audio_bytes, github_token)
+    audio_url = upload_to_spaces(
+        audio_bytes, audio_filename,
+        spaces_key, spaces_secret, spaces_region, spaces_bucket,
+    )
     print(f"    Audio URL: {audio_url}")
 
     print("\n[7/7] Preparing HTML document and sending email...")
@@ -732,31 +699,27 @@ def run_digest(
 
 
 def main() -> None:
-    github_token = os.environ["GH_TOKEN"]
-    github_repo = os.environ["GITHUB_REPOSITORY"]
     gmail_user = os.environ["GMAIL_USER"]
     gmail_password = os.environ["GMAIL_APP_PASSWORD"]
     recipient = os.environ["RECIPIENT_EMAIL"]
     digest_type = os.environ.get("DIGEST_TYPE", "both").lower()
+    spaces_key = os.environ["DO_SPACES_KEY"]
+    spaces_secret = os.environ["DO_SPACES_SECRET"]
+    spaces_region = os.environ["DO_SPACES_REGION"]
+    spaces_bucket = os.environ["DO_SPACES_BUCKET"]
 
     print(f"\nWeekly AI Digest Generator")
     print(f"Week of: {WEEK_DISPLAY}")
     print(f"Digest(s): {digest_type}")
-    print(f"Repo: {github_repo}")
-
-    # Create one GitHub Release per week, shared by both digest audio files
-    print("\nCreating / fetching GitHub Release for this week...")
-    release_id, upload_url_base = get_or_create_github_release(WEEK_DATE, github_token, github_repo)
-    print(f"  Release ID: {release_id}")
 
     kwargs = dict(
-        github_token=github_token,
-        github_repo=github_repo,
         gmail_user=gmail_user,
         gmail_password=gmail_password,
         recipient=recipient,
-        release_id=release_id,
-        upload_url_base=upload_url_base,
+        spaces_key=spaces_key,
+        spaces_secret=spaces_secret,
+        spaces_region=spaces_region,
+        spaces_bucket=spaces_bucket,
     )
 
     if digest_type in ("both", "cs"):
