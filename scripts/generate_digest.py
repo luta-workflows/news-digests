@@ -344,7 +344,6 @@ def generate_full_digest(digest_type: str, research: str) -> str:
                 "Aim for 5–8 news items ordered by impact."
             )},
         ],
-        max_completion_tokens=4096,
     )
     choice = response.choices[0]
     content = choice.message.content
@@ -360,6 +359,12 @@ def generate_full_digest(digest_type: str, research: str) -> str:
             f"    Token usage — prompt: {usage.prompt_tokens}, "
             f"completion: {usage.completion_tokens}, "
             f"total: {usage.total_tokens}"
+        )
+    if finish_reason == "length":
+        print(
+            f"    WARNING: finish_reason='length' — model hit max_completion_tokens. "
+            "If content is empty this is a reasoning model consuming all tokens internally. "
+            "Increase max_completion_tokens further if this happens again."
         )
     if content:
         print(f"    Content preview: {content.strip()[:200].replace(chr(10), ' ')!r}")
@@ -437,7 +442,6 @@ def generate_podcast_script(full_digest: str, digest_type: str) -> str:
                 ),
             },
         ],
-        max_completion_tokens=2200,
     )
     choice = response.choices[0]
     content = choice.message.content
