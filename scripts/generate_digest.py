@@ -7,6 +7,9 @@ Produces two digests (CS Leadership & CTO/Engineering), each with:
   - A short HTML email summary with top stories
   - A full structured HTML document attachment (links preserved)
   - An MP3 podcast audio file hosted on GitHub Releases
+
+News research uses Tavily Search API (real-time web search, last 7 days).
+Content generation, podcast scripting, and TTS use OpenAI.
 """
 
 import os
@@ -21,11 +24,22 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from openai import OpenAI
 
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]
 
 NOW = datetime.utcnow()
 WEEK_DATE = NOW.strftime("%Y-%m-%d")
 WEEK_DISPLAY = NOW.strftime("%B %d, %Y")
+
+# ── Model configuration ────────────────────────────────────────────────────────
+# Digest generation is the highest-value step — use the best available model.
+# Summary extraction and podcast scripting are formulaic — mini is sufficient.
+# Change these constants to update models without touching the rest of the code.
+
+MODEL_DIGEST = "gpt-5.2"       # Full structured digest (synthesis + analysis)
+MODEL_AUXILIARY = "gpt-5-mini" # JSON extraction, podcast script (structured/formulaic)
+MODEL_TTS = "tts-1-hd"         # OpenAI TTS; "tts-1" is faster/cheaper if quality is fine
+TTS_VOICE = "onyx"             # Options: alloy, echo, fable, onyx, nova, shimmer
 
 # ── Search queries ─────────────────────────────────────────────────────────────
 
@@ -215,27 +229,60 @@ def chunk_text_for_tts(text: str, max_chars: int = 4000) -> list[str]:
 
 
 def research_news(queries: list[str]) -> str:
-    """Gather recent news using the OpenAI Responses API with web search."""
-    results = []
+    """
+    Gather recent news using the Tavily Search API.
+    Restricts results to the past 7 days so all content is current.
+    Returns a formatted string of search results with titles, URLs, and content snippets
+    ready to be passed to GPT-4o for digest generation.
+    """
+    all_results: list[str] = []
+
     for i, query in enumerate(queries):
-        print(f"    [{i+1}/{len(queries)}] Searching: {query[:70]}...")
+        print(f"    [{i+1}/{len(queries)}] Tavily search: {query[:70]}...")
         try:
-            response = client.responses.create(
-                model="gpt-4o",
-                tools=[{"type": "web_search_preview"}],
-                input=(
-                    f"Find the most important and specific news items from the past 7 days about: {query}. "
-                    "For each item return: the headline, a 2-3 sentence summary of what happened, "
-                    "the company/vendor involved, and the full source URL. Be specific and factual."
-                ),
+            resp = requests.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": TAVILY_API_KEY,
+                    "query": query,
+                    "search_depth": "advanced",   # deeper crawl, more relevant results
+                    "max_results": 6,
+                    "days": 7,                     # only the past 7 days
+                    "include_answer": True,        # Tavily's own AI summary of results
+                    "include_raw_content": False,
+                },
+                timeout=30,
             )
-            results.append(response.output_text)
+            resp.raise_for_status()
+            data = resp.json()
+
+            block_lines = [f"## Search: {query}\n"]
+
+            # Tavily's synthesised answer for this query
+            if data.get("answer"):
+                block_lines.append(f"**Summary:** {data['answer']}\n")
+
+            # Individual search results
+            for r in data.get("results", []):
+                title = r.get("title", "Untitled")
+                url = r.get("url", "")
+                content = r.get("content", "").strip()
+                score = r.get("score", 0)
+                block_lines.append(f"### [{title}]({url})")
+                block_lines.append(f"Relevance score: {score:.2f}")
+                block_lines.append(content)
+                block_lines.append("")
+
+            all_results.append("\n".join(block_lines))
+
         except Exception as e:
-            print(f"    Warning: search failed for query {i+1}: {e}")
-            results.append(f"[Search failed for: {query}]")
+            print(f"    Warning: Tavily search failed for query {i+1}: {e}")
+            all_results.append(f"[Search failed for: {query} — {e}]")
+
         if i < len(queries) - 1:
-            time.sleep(1)
-    return "\n\n---\n\n".join(results)
+            time.sleep(0.5)  # light throttle between queries
+
+    return "\n\n---\n\n".join(all_results)
 
 
 def generate_full_digest(digest_type: str, research: str) -> str:
@@ -243,9 +290,9 @@ def generate_full_digest(digest_type: str, research: str) -> str:
     system = CS_SYSTEM_PROMPT if digest_type == "cs" else CTO_SYSTEM_PROMPT
     label = "Customer Success Leadership" if digest_type == "cs" else "Software Engineering / CTO"
 
-    print("    Generating full digest with GPT-4o...")
-    response = client.chat.completions.create(
-        model="gpt-4o",
+    print(f"    Generating full digest with {MODEL_DIGEST}...")
+    response = openai_client.chat.completions.create(
+        model=MODEL_DIGEST,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": (
@@ -267,9 +314,9 @@ def generate_full_digest(digest_type: str, research: str) -> str:
 def generate_short_summary(full_digest: str, digest_type: str) -> list[dict]:
     """Extract the top 5 items as structured JSON for the email body."""
     label = "Customer Success Leadership" if digest_type == "cs" else "Software Engineering / CTO"
-    print("    Generating short email summary...")
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
+    print(f"    Generating short email summary with {MODEL_AUXILIARY}...")
+    response = openai_client.chat.completions.create(
+        model=MODEL_AUXILIARY,
         messages=[
             {
                 "role": "system",
@@ -306,9 +353,9 @@ def generate_short_summary(full_digest: str, digest_type: str) -> list[dict]:
 def generate_podcast_script(full_digest: str, digest_type: str) -> str:
     """Generate a conversational podcast script for TTS narration (~10 min / ~1500 words)."""
     label = "Customer Success Leadership" if digest_type == "cs" else "Software Engineering and CTO"
-    print("    Generating podcast script...")
-    response = client.chat.completions.create(
-        model="gpt-4o",
+    print(f"    Generating podcast script with {MODEL_AUXILIARY}...")
+    response = openai_client.chat.completions.create(
+        model=MODEL_AUXILIARY,
         messages=[
             {
                 "role": "system",
@@ -345,9 +392,9 @@ def generate_audio(podcast_script: str) -> bytes:
     audio_data = b""
     for i, chunk in enumerate(chunks):
         print(f"      Chunk {i+1}/{len(chunks)} ({len(chunk)} chars)")
-        response = client.audio.speech.create(
-            model="tts-1-hd",
-            voice="onyx",
+        response = openai_client.audio.speech.create(
+            model=MODEL_TTS,
+            voice=TTS_VOICE,
             input=chunk,
             response_format="mp3",
         )

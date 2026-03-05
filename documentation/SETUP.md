@@ -70,7 +70,21 @@ The workflow needs permission to create GitHub Releases (for audio hosting).
 
 ---
 
-## Step 4 — Get your OpenAI API key
+## Step 4a — Get your Tavily API key
+
+News research uses [Tavily](https://tavily.com), a search API built specifically for AI applications.
+It performs real-time web searches and filters to the **past 7 days** so every digest reflects actual
+current events — not the model's training data.
+
+1. Go to [app.tavily.com](https://app.tavily.com) and sign up (free tier: 1,000 searches/month)
+2. Copy your API key from the dashboard
+
+> **Cost:** Each weekly run makes 10 Tavily searches (5 per digest). The free tier easily covers
+> this. Paid plans start at $20/month if you exceed the free limit.
+
+---
+
+## Step 4b — Get your OpenAI API key
 
 1. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 2. Click **Create new secret key**, give it a name like `GitHub Digest`
@@ -93,6 +107,7 @@ Add all four of the following:
 | Secret name | Value |
 |-------------|-------|
 | `OPENAI_API_KEY` | Your OpenAI API key from Step 4 |
+| `TAVILY_API_KEY` | Your Tavily API key from [app.tavily.com](https://app.tavily.com) |
 | `GMAIL_USER` | Your full Gmail address, e.g. `you@gmail.com` |
 | `GMAIL_APP_PASSWORD` | The 16-character App Password from Step 3 |
 | `RECIPIENT_EMAIL` | The email address to send digests to (can be the same as `GMAIL_USER`) |
@@ -125,14 +140,10 @@ If the run fails, click the failed step in the logs for details. Common issues:
 | Error | Fix |
 |-------|-----|
 | `AuthenticationError: OPENAI_API_KEY` | Check the secret name and that the key has API credits |
+| `401 from Tavily` | Check `TAVILY_API_KEY` secret — copy it fresh from app.tavily.com |
+| `429 from Tavily` | Free tier (1,000 searches/month) exceeded — upgrade or reduce query count |
 | `SMTPAuthenticationError` | Check `GMAIL_USER` / `GMAIL_APP_PASSWORD`; ensure App Password is correct |
 | `403 on GitHub Release` | Check that Actions write permissions are enabled (Step 2) |
-| `openai.APIError: web_search_preview` | Your OpenAI plan may not include web search — see note below |
-
-> **Web search note:** The script uses OpenAI's `web_search_preview` tool via the Responses API,
-> which requires a paid OpenAI API plan (not just a ChatGPT subscription). If web search is not
-> available on your plan, the research step will fall back gracefully and GPT-4o will use its
-> training knowledge. The digests will still be generated but may not reflect the very latest news.
 
 ---
 
