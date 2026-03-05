@@ -305,7 +305,7 @@ def generate_full_digest(digest_type: str, research: str) -> str:
                 "Aim for 5–8 news items ordered by impact."
             )},
         ],
-        max_tokens=4096,
+        max_completion_tokens=4096,
         temperature=0.3,
     )
     return response.choices[0].message.content
@@ -379,7 +379,7 @@ def generate_podcast_script(full_digest: str, digest_type: str) -> str:
                 ),
             },
         ],
-        max_tokens=2200,
+        max_completion_tokens=2200,
         temperature=0.5,
     )
     return response.choices[0].message.content
