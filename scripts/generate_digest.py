@@ -41,6 +41,13 @@ MODEL_AUXILIARY = "gpt-5-mini" # JSON extraction, podcast script (structured/for
 MODEL_TTS = "tts-1-hd"         # OpenAI TTS; "tts-1" is faster/cheaper if quality is fine
 TTS_VOICE = "onyx"             # Options: alloy, echo, fable, onyx, nova, shimmer
 
+# ── Content quality thresholds ─────────────────────────────────────────────────
+# A real digest with 5-8 fully-structured items should comfortably exceed these.
+# If the model returns an empty or truncated response the run aborts before
+# generating audio or sending email, avoiding junk deliveries.
+MIN_DIGEST_CHARS = 3000    # minimum characters for a valid full digest
+MIN_PODCAST_CHARS = 1500   # minimum characters for a valid podcast script
+
 # ── Search queries ─────────────────────────────────────────────────────────────
 
 CS_SEARCH_QUERIES = [
@@ -212,6 +219,28 @@ EMAIL_HTML_TEMPLATE = """<!DOCTYPE html>
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+def validate_content_length(content: str | None, step: str, min_chars: int) -> str:
+    """
+    Assert that generated content meets the minimum length threshold.
+    Raises RuntimeError if the content is empty, None, or suspiciously short,
+    which stops the pipeline before any downstream steps (audio, email) run.
+    """
+    if not content or not content.strip():
+        raise RuntimeError(
+            f"[ABORT] {step}: model returned empty content. "
+            "Check API key, model name, and rate limits."
+        )
+    actual = len(content.strip())
+    if actual < min_chars:
+        preview = content.strip()[:200].replace("\n", " ")
+        raise RuntimeError(
+            f"[ABORT] {step}: content too short ({actual} chars, minimum {min_chars}). "
+            f"Model response preview: {preview!r}"
+        )
+    print(f"    ✓ Content length OK: {actual:,} chars")
+    return content
+
+
 def chunk_text_for_tts(text: str, max_chars: int = 4000) -> list[str]:
     """Split text at sentence boundaries to fit TTS API limit."""
     paragraphs = text.split("\n")
@@ -256,14 +285,16 @@ def research_news(queries: list[str]) -> str:
             resp.raise_for_status()
             data = resp.json()
 
+            results = data.get("results", [])
+            has_answer = bool(data.get("answer"))
             block_lines = [f"## Search: {query}\n"]
 
             # Tavily's synthesised answer for this query
-            if data.get("answer"):
+            if has_answer:
                 block_lines.append(f"**Summary:** {data['answer']}\n")
 
             # Individual search results
-            for r in data.get("results", []):
+            for r in results:
                 title = r.get("title", "Untitled")
                 url = r.get("url", "")
                 content = r.get("content", "").strip()
@@ -273,7 +304,14 @@ def research_news(queries: list[str]) -> str:
                 block_lines.append(content)
                 block_lines.append("")
 
-            all_results.append("\n".join(block_lines))
+            block_text = "\n".join(block_lines)
+            all_results.append(block_text)
+
+            print(
+                f"      → {len(results)} result(s), "
+                f"answer={'yes' if has_answer else 'no'}, "
+                f"{len(block_text):,} chars"
+            )
 
         except Exception as e:
             print(f"    Warning: Tavily search failed for query {i+1}: {e}")
@@ -291,6 +329,7 @@ def generate_full_digest(digest_type: str, research: str) -> str:
     label = "Customer Success Leadership" if digest_type == "cs" else "Software Engineering / CTO"
 
     print(f"    Generating full digest with {MODEL_DIGEST}...")
+    print(f"    Research input: {len(research):,} chars sent to model")
     response = openai_client.chat.completions.create(
         model=MODEL_DIGEST,
         messages=[
@@ -307,7 +346,27 @@ def generate_full_digest(digest_type: str, research: str) -> str:
         ],
         max_completion_tokens=4096,
     )
-    return response.choices[0].message.content
+    choice = response.choices[0]
+    content = choice.message.content
+    finish_reason = choice.finish_reason
+    usage = response.usage
+    print(
+        f"    OpenAI response — finish_reason: {finish_reason!r}, "
+        f"content type: {type(content).__name__}, "
+        f"content length: {len(content) if content else 0} chars"
+    )
+    if usage:
+        print(
+            f"    Token usage — prompt: {usage.prompt_tokens}, "
+            f"completion: {usage.completion_tokens}, "
+            f"total: {usage.total_tokens}"
+        )
+    if content:
+        print(f"    Content preview: {content.strip()[:200].replace(chr(10), ' ')!r}")
+    else:
+        print(f"    WARNING: content is {content!r} — model may use reasoning tokens only")
+    validate_content_length(content, "Full digest generation", MIN_DIGEST_CHARS)
+    return content
 
 
 def generate_short_summary(full_digest: str, digest_type: str) -> list[dict]:
@@ -352,6 +411,7 @@ def generate_podcast_script(full_digest: str, digest_type: str) -> str:
     """Generate a conversational podcast script for TTS narration (~10 min / ~1500 words)."""
     label = "Customer Success Leadership" if digest_type == "cs" else "Software Engineering and CTO"
     print(f"    Generating podcast script with {MODEL_AUXILIARY}...")
+    print(f"    Digest input: {len(full_digest):,} chars sent to model")
     response = openai_client.chat.completions.create(
         model=MODEL_AUXILIARY,
         messages=[
@@ -379,7 +439,18 @@ def generate_podcast_script(full_digest: str, digest_type: str) -> str:
         ],
         max_completion_tokens=2200,
     )
-    return response.choices[0].message.content
+    choice = response.choices[0]
+    content = choice.message.content
+    print(
+        f"    OpenAI response — finish_reason: {choice.finish_reason!r}, "
+        f"content length: {len(content) if content else 0} chars"
+    )
+    if content:
+        print(f"    Content preview: {content.strip()[:150].replace(chr(10), ' ')!r}")
+    else:
+        print(f"    WARNING: content is {content!r}")
+    validate_content_length(content, "Podcast script generation", MIN_PODCAST_CHARS)
+    return content
 
 
 def generate_audio(podcast_script: str) -> bytes:
@@ -604,14 +675,18 @@ def run_digest(
     print("\n[1/7] Researching news via web search...")
     queries = CS_SEARCH_QUERIES if digest_type == "cs" else CTO_SEARCH_QUERIES
     research = research_news(queries)
+    print(f"    Research gathered: {len(research):,} chars")
 
     print("\n[2/7] Generating full structured digest...")
+    # validate_content_length is called inside generate_full_digest — will raise on failure.
     full_digest_md = generate_full_digest(digest_type, research)
 
     print("\n[3/7] Extracting top stories for email summary...")
     short_items = generate_short_summary(full_digest_md, digest_type)
+    print(f"    Extracted {len(short_items)} story item(s)")
 
     print("\n[4/7] Writing podcast script...")
+    # validate_content_length is called inside generate_podcast_script — will raise on failure.
     podcast_script = generate_podcast_script(full_digest_md, digest_type)
 
     print("\n[5/7] Generating TTS audio...")
