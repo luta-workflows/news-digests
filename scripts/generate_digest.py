@@ -306,7 +306,6 @@ def generate_full_digest(digest_type: str, research: str) -> str:
             )},
         ],
         max_completion_tokens=4096,
-        temperature=0.3,
     )
     return response.choices[0].message.content
 
@@ -336,7 +335,6 @@ def generate_short_summary(full_digest: str, digest_type: str) -> list[dict]:
                 ),
             },
         ],
-        temperature=0.2,
     )
     raw = response.choices[0].message.content.strip()
     # Strip markdown fences if present
@@ -380,7 +378,6 @@ def generate_podcast_script(full_digest: str, digest_type: str) -> str:
             },
         ],
         max_completion_tokens=2200,
-        temperature=0.5,
     )
     return response.choices[0].message.content
 
