@@ -276,7 +276,8 @@ def research_news(queries: list[str]) -> str:
                     "query": query,
                     "search_depth": "advanced",   # deeper crawl, more relevant results
                     "max_results": 6,
-                    "days": 7,                     # only the past 7 days
+                    "topic": "news",               # target news sources; adds published_date metadata
+                    "time_range": "week",          # only the past 7 days
                     "include_answer": True,        # Tavily's own AI summary of results
                     "include_raw_content": False,
                 },
@@ -299,8 +300,10 @@ def research_news(queries: list[str]) -> str:
                 url = r.get("url", "")
                 content = r.get("content", "").strip()
                 score = r.get("score", 0)
+                published_date = r.get("published_date", "")
                 block_lines.append(f"### [{title}]({url})")
-                block_lines.append(f"Relevance score: {score:.2f}")
+                date_str = f" | Published: {published_date}" if published_date else ""
+                block_lines.append(f"Relevance score: {score:.2f}{date_str}")
                 block_lines.append(content)
                 block_lines.append("")
 
