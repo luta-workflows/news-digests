@@ -84,11 +84,6 @@ HUMAN-IN-THE-LOOP PHILOSOPHY:
 - The digest should reflect a nuanced view: AI can and should handle the majority of support inquiries,
   but human support remains essential — particularly for complex, emotionally sensitive, or high-stakes
   cases where customers need reassurance and genuine human judgement.
-- Research consistently shows that a large share of customers still prefer human interaction for
-  difficult situations, and operators who treat human service as a differentiator outperform those
-  pursuing full automation.
-- Always acknowledge human-in-the-loop as a feature, not a fallback. Frame AI deflection targets
-  alongside the importance of making human escalation seamless, well-staffed, and high-quality.
 - Never present "100% AI" as an unqualified goal. The best outcomes come from AI handling volume
   efficiently while freeing skilled human agents to focus on the cases that truly need them.
 """
@@ -389,7 +384,7 @@ def research_news(queries: list[str]) -> str:
 def generate_full_digest(digest_type: str, research: str) -> str:
     """Generate the full structured digest in Markdown."""
     system = CS_SYSTEM_PROMPT if digest_type == "cs" else CTO_SYSTEM_PROMPT
-    label = "Customer Success Leadership" if digest_type == "cs" else "Software Engineering / CTO"
+    label = "Customer Support Leadership" if digest_type == "cs" else "Software Engineering / CTO"
 
     print(f"    Generating full digest with {MODEL_DIGEST}...")
     print(f"    Research input: {len(research):,} chars sent to model")
@@ -439,7 +434,7 @@ def generate_full_digest(digest_type: str, research: str) -> str:
 
 def generate_short_summary(full_digest: str, digest_type: str) -> list[dict]:
     """Extract the top 5 items as structured JSON for the email body."""
-    label = "Customer Success Leadership" if digest_type == "cs" else "Software Engineering / CTO"
+    label = "Customer Support Leadership" if digest_type == "cs" else "Software Engineering / CTO"
     print(f"    Generating short email summary with {MODEL_AUXILIARY}...")
     response = openai_client.chat.completions.create(
         model=MODEL_AUXILIARY,
@@ -477,7 +472,7 @@ def generate_short_summary(full_digest: str, digest_type: str) -> list[dict]:
 
 def generate_podcast_script(full_digest: str, digest_type: str) -> str:
     """Generate a conversational podcast script for TTS narration (~10 min / ~1500 words)."""
-    label = "Customer Success Leadership" if digest_type == "cs" else "Software Engineering and CTO"
+    label = "Customer Support Leadership" if digest_type == "cs" else "Software Engineering and CTO"
     print(f"    Generating podcast script with {MODEL_AUXILIARY}...")
     print(f"    Digest input: {len(full_digest):,} chars sent to model")
     response = openai_client.chat.completions.create(
@@ -658,7 +653,7 @@ def send_email(
     recipient: str,
 ) -> None:
     if digest_type == "cs":
-        title = "Customer Success Leadership"
+        title = "Customer Support Leadership"
         header_bg = "#1e3a5f"
         accent = "#2563eb"
     else:
@@ -751,7 +746,7 @@ def run_digest(
 
     print("\n[7/7] Preparing HTML document and sending email...")
     if digest_type == "cs":
-        doc_title = f"Weekly AI Digest – Customer Success Leadership | {WEEK_DISPLAY}"
+        doc_title = f"Weekly AI Digest – Customer Support Leadership | {WEEK_DISPLAY}"
     else:
         doc_title = f"Weekly AI Digest – Engineering & CTO | {WEEK_DISPLAY}"
     full_digest_html = markdown_to_html(full_digest_md, doc_title)
