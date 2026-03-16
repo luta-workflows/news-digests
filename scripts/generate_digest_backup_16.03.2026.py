@@ -39,7 +39,7 @@ WEEK_DISPLAY = NOW.strftime("%B %d, %Y")
 MODEL_DIGEST = "gpt-5.2"       # Full structured digest (synthesis + analysis)
 MODEL_AUXILIARY = "gpt-5-mini" # JSON extraction, podcast script (structured/formulaic)
 MODEL_TTS = "tts-1-hd"         # OpenAI TTS; "tts-1" is faster/cheaper if quality is fine
-TTS_VOICE = "nova"             # Options: alloy, echo, fable, onyx, nova, shimmer
+TTS_VOICE = "onyx"             # Options: alloy, echo, fable, onyx, nova, shimmer
 
 # ── Content quality thresholds ─────────────────────────────────────────────────
 # A real digest with 5-8 fully-structured items should comfortably exceed these.
@@ -51,12 +51,11 @@ MIN_PODCAST_CHARS = 1500   # minimum characters for a valid podcast script
 # ── Search queries ─────────────────────────────────────────────────────────────
 
 CS_SEARCH_QUERIES = [
-    f"what customers value most in customer service expectations trends SaaS {NOW.year}",
-    f"AI customer support efficiency gains success stories SaaS companies {NOW.year}",
-    f"Intercom Fin Zendesk AI Salesforce Einstein HubSpot Breeze new features customer support {NOW.year}",
-    f"AI agent automation customer support new capabilities opportunities {NOW.year}",
-    f"AI customer support risks hallucination mitigation strategies SaaS {NOW.year}",
-    f"customer support personalization self-service CSAT NPS improvement AI {NOW.year}",
+    f"AI customer service failures incidents SaaS companies {NOW.year}",
+    f"AI support automation rollback negative customer experience outcomes {NOW.year}",
+    f"Intercom Fin Zendesk AI Salesforce Einstein HubSpot Breeze AI new features {NOW.year}",
+    f"AI hallucination customer-facing consequences enterprise {NOW.year}",
+    f"AI customer success retention churn risk real world case study {NOW.year}",
 ]
 
 CTO_SEARCH_QUERIES = [
@@ -69,54 +68,42 @@ CTO_SEARCH_QUERIES = [
 
 # ── System prompts ─────────────────────────────────────────────────────────────
 
-CS_SYSTEM_PROMPT = f"""You are an expert analyst creating a weekly digest for a Customer Support Leadership team at a SaaS company. Your audience is customer support leaders — VPs of Support, Head of CX, Support Operations leads — who want to stay ahead of both the exciting opportunities and the real risks in their field.
+CS_SYSTEM_PROMPT = f"""You are an expert analyst creating a weekly AI news digest for a Customer Success Director at a large SaaS company.
 
-AUDIENCE FOCUS: SaaS customer support leadership. Frame everything through the lens of day-to-day support operations, team efficiency, and the customer experience delivered by support teams. This is NOT a general "Customer Success" digest — it is specifically about customer support.
-
-BALANCE REQUIREMENT: This digest must be genuinely balanced. Lead with what is exciting and possible, not with what is scary. Opportunities and new capabilities should receive equal or greater emphasis than risks. Risks must be concrete, actionable, and paired with clear mitigations — not presented as doom-and-gloom.
-
-STRUCTURE PHILOSOPHY:
-1. Start with what customers need and value (the goal)
-2. Then cover what AI and new tooling can do to meet those needs (the opportunity)
-3. Finally cover the risks that come with those tools, with pragmatic mitigations (the guardrails)
+PRIORITY ORDER: Customer-facing risk first > SaaS case studies > vendor updates.
 
 For EACH news item, include ALL of the following (use Markdown headers and bullets):
 1. **Headline-style title + company/vendor** (H3)
 2. **What happened** – 1–2 concise bullets
-3. **Opportunity & Customer Experience Upside**
-   - What efficiency gain or CX improvement does this enable?
-   - Realistic benefit for a SaaS support team (faster resolution, higher CSAT, reduced ticket volume, etc.)
-4. **Risk Assessment** *(only if a genuine risk exists — skip or minimise if not relevant)*
-   - What could go wrong in a support context
-   - Severity: High / Med / Low  |  Likelihood: High / Med / Low
-5. **Recommended Actions**
-   - Quick win to capture the opportunity
-   - Guardrail or monitoring to manage any risk
-6. **Where it applies** – Tier-1 Support / Escalations / Self-Service / Onboarding / Voice-of-Customer / QBRs
-7. **Who should act** – Support Ops / Team Leads / CX Engineers / Product
-8. **Impact Score** – High / Med / Low
-9. **Confidence Level** – High / Med / Low
+3. **Customer-Facing Risk Assessment**
+   - What could go wrong
+   - Severity: High / Med / Low
+   - Likelihood: High / Med / Low
+4. **Mitigations / Controls (Playbook Style)**
+   - Guardrails
+   - Human-in-the-loop mechanisms
+   - Monitoring signals
+   - Escalation triggers
+5. **What we can learn** – practical takeaway
+6. **Why it matters for Customer Success** – note impact on CX / Cost-to-serve / Retention / Expansion / Compliance
+7. **Where it applies** – Support / Onboarding / Renewals / QBRs / VoC / Escalation
+8. **Who is affected** – Customers / CSMs / Support / Product / Engineering
+9. **Impact Score** – High / Med / Low
+10. **Confidence Level** – High / Med / Low
 
-Order items so that the most exciting and highest-upside opportunities appear first. Risk-heavy items without a clear upside go last.
+Order items by potential negative customer impact (highest first).
 
-REQUIRED ADDITIONAL SECTIONS (in this order):
-
-### What Customers Value Right Now
-3–5 concrete findings or trends about what customers expect and appreciate in great support — drawn from any research, surveys, or case studies in the provided content. Focus on actionable insights a support leader can use immediately.
-
-### AI Opportunities Spotlight
-The top 3–5 most impactful AI-powered improvements available *today* for SaaS support teams: new tools, new capabilities, or proven use cases that can meaningfully improve efficiency or customer experience.
-
-### Key Risks & Mitigation Playbook
-A concise consolidated view of the most important risks identified this week, paired with specific mitigations. Keep this proportionate — if it was a quiet week for risks, say so.
+REQUIRED ADDITIONAL SECTIONS:
+### Signals to Watch
+3–5 leading indicators that customer-facing AI risk may be increasing.
 
 ### What To Do Next Week
-3–5 concrete, prioritised actions for a support leader — at least two should be opportunity-capturing, not just risk-mitigation.
+3–5 concrete, actionable steps.
 
 ### Vendor Capability Snapshot
-Short summary of notable support-platform releases and updates this week (Intercom, Zendesk, Salesforce, HubSpot, Freshdesk, etc.), with hyperlinks.
+Short summary of notable CS-relevant vendor capabilities released this week, with hyperlinks.
 
-TONE: Forward-looking, constructive, and energising alongside being rigorous and action-oriented. Match the enthusiasm of the opportunities with the pragmatism of the risks. No hype, but no unnecessary alarm either. Write as a trusted advisor who believes AI can genuinely improve support — while being honest about the pitfalls.
+TONE: Analytical, risk-aware, operationally grounded, action-oriented. No hype. No vendor marketing language.
 FORMAT: Well-structured Markdown. Embed hyperlinks to sources inline using [text](url) format. Do not invent URLs — only use URLs from the research provided.
 """
 
@@ -201,8 +188,8 @@ EMAIL_HTML_TEMPLATE = """<!DOCTYPE html>
 
   <div class="body">
     <p class="intro">
-      Your weekly briefing on what customers value, AI opportunities for support teams, and key risks to watch.
-      Below are the top stories — the full structured digest with all sources and detail is attached as an HTML document.
+      Your weekly briefing on AI developments that matter. Below are the top stories —
+      the full structured digest with all sources and detail is attached as an HTML document.
     </p>
 
     <div class="section-label">Top Stories This Week</div>
@@ -440,28 +427,20 @@ def generate_podcast_script(full_digest: str, digest_type: str) -> str:
                 "role": "system",
                 "content": (
                     "You convert structured weekly digests into engaging, conversational podcast scripts "
-                    "optimised for text-to-speech narration. Write as if a knowledgeable, enthusiastic colleague "
-                    "is briefing a busy support leader over coffee — warm, clear, and energising. "
-                    "Tone: constructive and forward-looking. Lead with opportunities and exciting developments. "
-                    "When covering risks, be factual and solution-oriented — never alarmist or dramatic. "
-                    "No bullet symbols, no markdown — pure flowing spoken prose."
+                    "optimised for text-to-speech narration. Write as if a knowledgeable analyst is briefing "
+                    "a busy executive. No bullet symbols, no markdown — pure flowing spoken prose."
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    f"Convert this {label} digest into a podcast script (target: ~1500 words, ~10 min spoken).\n\n"
-                    f"Opening line: \"Welcome to your Weekly Customer Support AI Digest. "
-                    f"I'm covering the week of {WEEK_DISPLAY}. There's a lot of exciting stuff this week, so let's dive in.\"\n\n"
-                    "Follow this narrative flow:\n"
-                    "1. Start with what customers are telling us they value right now — set the context for why this week's news matters.\n"
-                    "2. Cover the top AI opportunities and new capabilities — be enthusiastic and concrete about what's possible.\n"
-                    "3. Address the key risks and mitigations — be honest and practical, but keep it proportionate and solution-focused.\n"
-                    "4. Close with the top 2–3 actions for the week ahead.\n\n"
-                    "Cover 5 to 6 of the most important items. Mention company names and concrete details. "
-                    "Keep the energy positive and forward-looking throughout.\n\n"
-                    f"Closing line: \"That's your weekly briefing. The full digest with all sources and detail is "
-                    f"in your inbox as an attached document. Have a great week — there's a lot to work with.\"\n\n"
+                    f"Convert this {label} AI digest into a podcast script (target: ~1500 words, ~10 min spoken).\n\n"
+                    f"Opening line: \"Welcome to your Weekly AI Digest for {label}. "
+                    f"I'm covering the week of {WEEK_DISPLAY}. Let's get into it.\"\n\n"
+                    "Cover the top 5 to 6 most important items with enough context and practical takeaways "
+                    "that the listener can act on what they've heard. Mention company names and concrete details.\n\n"
+                    f"Closing line: \"That's your weekly briefing. The full digest with all sources is in your inbox "
+                    f"as an attached document. Have a productive week.\"\n\n"
                     f"Digest:\n{full_digest}"
                 ),
             },
