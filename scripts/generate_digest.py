@@ -39,7 +39,7 @@ WEEK_DISPLAY = NOW.strftime("%B %d, %Y")
 MODEL_DIGEST = "gpt-5.2"       # Full structured digest (synthesis + analysis)
 MODEL_AUXILIARY = "gpt-5-mini" # JSON extraction, podcast script (structured/formulaic)
 MODEL_TTS = "tts-1-hd"         # OpenAI TTS; "tts-1" is faster/cheaper if quality is fine
-TTS_VOICE = "nova"             # Options: alloy, echo, fable, onyx, nova, shimmer
+TTS_VOICE = "fable"            # Options: alloy, echo, fable, onyx, nova, shimmer — fable has a British accent
 
 # ── Content quality thresholds ─────────────────────────────────────────────────
 # A real digest with 5-8 fully-structured items should comfortably exceed these.
@@ -47,6 +47,51 @@ TTS_VOICE = "nova"             # Options: alloy, echo, fable, onyx, nova, shimme
 # generating audio or sending email, avoiding junk deliveries.
 MIN_DIGEST_CHARS = 3000    # minimum characters for a valid full digest
 MIN_PODCAST_CHARS = 1500   # minimum characters for a valid podcast script
+
+# ── Organisational context ─────────────────────────────────────────────────────
+# Used as silent background context for the CS digest only.
+# It informs how the model selects and frames content — it is NOT surfaced
+# as an explicit section in the digest output.
+
+CS_ORG_CONTEXT = """
+READER CONTEXT (use this silently to inform relevance judgements — do NOT reference it explicitly in the digest):
+The readers are customer support leaders across Visma — a group of 100+ B2B software companies operating
+across Europe and beyond. Each company has its own support team; the group is in an active AI adoption
+programme. Key priorities for the organisation in 2026 are:
+  1. Ensure every Visma company is actively using AI tools in customer support by end of 2026.
+  2. Reach a target where at least 50% of customer support inquiries are resolved using AI.
+
+Use this context to:
+- Favour news, case studies, and findings relevant to rolling out AI support tooling at scale across
+  multiple autonomous product teams and companies within a larger group.
+- Give extra weight to stories about AI adoption strategies, change management for support teams,
+  measuring AI deflection rates, and lessons learned from enterprise-scale rollouts.
+- Frame efficiency and adoption barriers through the lens of a decentralised group (100+ companies)
+  rather than a single-company deployment.
+- The audience is sophisticated and already committed to AI in support — skip basics, focus on what
+  helps them move faster and smarter.
+
+GEOGRAPHIC FOCUS:
+- Visma companies are primarily European. Strongly prefer European research, statistics, case studies,
+  and regulatory context (e.g. GDPR, EU AI Act) over US-centric data or examples.
+- Avoid citing US-only statistics as if they represent a global norm. When only US data is available,
+  note its geographic scope briefly and apply it with appropriate caution.
+- The four support platforms used across Visma companies are Zendesk, HubSpot, Salesforce, and Intercom.
+  Cover updates, new capabilities, and changes to these platforms thoroughly — they are directly relevant
+  regardless of where those vendors are headquartered.
+
+HUMAN-IN-THE-LOOP PHILOSOPHY:
+- The digest should reflect a nuanced view: AI can and should handle the majority of support inquiries,
+  but human support remains essential — particularly for complex, emotionally sensitive, or high-stakes
+  cases where customers need reassurance and genuine human judgement.
+- Research consistently shows that a large share of customers still prefer human interaction for
+  difficult situations, and operators who treat human service as a differentiator outperform those
+  pursuing full automation.
+- Always acknowledge human-in-the-loop as a feature, not a fallback. Frame AI deflection targets
+  alongside the importance of making human escalation seamless, well-staffed, and high-quality.
+- Never present "100% AI" as an unqualified goal. The best outcomes come from AI handling volume
+  efficiently while freeing skilled human agents to focus on the cases that truly need them.
+"""
 
 # ── Search queries ─────────────────────────────────────────────────────────────
 
@@ -57,6 +102,7 @@ CS_SEARCH_QUERIES = [
     f"AI agent automation customer support new capabilities opportunities {NOW.year}",
     f"AI customer support risks hallucination mitigation strategies SaaS {NOW.year}",
     f"customer support personalization self-service CSAT NPS improvement AI {NOW.year}",
+    f"enterprise AI support rollout adoption deflection rate scaling multiple teams {NOW.year}",
 ]
 
 CTO_SEARCH_QUERIES = [
@@ -70,6 +116,7 @@ CTO_SEARCH_QUERIES = [
 # ── System prompts ─────────────────────────────────────────────────────────────
 
 CS_SYSTEM_PROMPT = f"""You are an expert analyst creating a weekly digest for a Customer Support Leadership team at a SaaS company. Your audience is customer support leaders — VPs of Support, Head of CX, Support Operations leads — who want to stay ahead of both the exciting opportunities and the real risks in their field.
+{CS_ORG_CONTEXT}
 
 AUDIENCE FOCUS: SaaS customer support leadership. Frame everything through the lens of day-to-day support operations, team efficiency, and the customer experience delivered by support teams. This is NOT a general "Customer Success" digest — it is specifically about customer support.
 
