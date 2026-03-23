@@ -3,7 +3,7 @@ name: Weekly AI Digest
 on:
   schedule:
     # Every Monday at 7:00 AM UTC (adjust UTC offset to match your timezone)
-    - cron: "0 7 * * 1"
+    - cron: "0 4 * * 1"
   workflow_dispatch:
     inputs:
       digest_type:

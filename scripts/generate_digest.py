@@ -484,31 +484,61 @@ def generate_podcast_script(full_digest: str, digest_type: str) -> str:
     label = "Customer Support Leadership" if digest_type == "cs" else "Software Engineering and CTO"
     print(f"    Generating podcast script with {MODEL_AUXILIARY}...")
     print(f"    Digest input: {len(full_digest):,} chars sent to model")
+
+    if digest_type == "cs":
+        system_persona = (
+            "You convert structured weekly digests into engaging, conversational podcast scripts "
+            "optimised for text-to-speech narration. Write as if a knowledgeable, enthusiastic colleague "
+            "is briefing a busy customer support leader over coffee — warm, clear, and energising. "
+            "Tone: constructive and forward-looking. Lead with opportunities and exciting developments. "
+            "When covering risks, be factual and solution-oriented — never alarmist or dramatic. "
+            "No bullet symbols, no markdown — pure flowing spoken prose."
+        )
+        opening_line = (
+            f"Welcome to your Weekly Customer Support AI Digest. "
+            f"I'm covering the week of {WEEK_DISPLAY}. There's a lot of exciting stuff this week, so let's dive in."
+        )
+        narrative_flow = (
+            "1. Start with what customers are telling us they value right now — set the context for why this week's news matters.\n"
+            "2. Cover the top AI opportunities and new capabilities for support teams — be enthusiastic and concrete about what's possible.\n"
+            "3. Address the key risks and mitigations — be honest and practical, but keep it proportionate and solution-focused.\n"
+            "4. Close with the top 2–3 actions for support leaders this week ahead."
+        )
+    else:
+        system_persona = (
+            "You convert structured weekly digests into engaging, conversational podcast scripts "
+            "optimised for text-to-speech narration. Write as if a sharp, pragmatic engineering colleague "
+            "is briefing a busy CTO or senior engineer over coffee — direct, technically grounded, and energising. "
+            "Tone: reality-based and enthusiastic about genuine breakthroughs, appropriately skeptical of hype. "
+            "Lead with the most impactful new capabilities and engineering patterns. "
+            "When covering risks, be concrete and solution-oriented — never alarmist. "
+            "No bullet symbols, no markdown — pure flowing spoken prose."
+        )
+        opening_line = (
+            f"Welcome to your Weekly Engineering and AI Digest. "
+            f"I'm covering the week of {WEEK_DISPLAY}. There's a lot worth unpacking this week, so let's get into it."
+        )
+        narrative_flow = (
+            "1. Start with the single most significant development this week — the thing a busy engineer should not miss.\n"
+            "2. Cover the top new capabilities, tools, and architectural patterns — be concrete about what they enable.\n"
+            "3. Address the key risks and quality concerns — be honest and practical, proportionate to the week.\n"
+            "4. Close with the top 2–3 experiments or actions worth kicking off this week."
+        )
+
     response = openai_client.chat.completions.create(
         model=MODEL_AUXILIARY,
         messages=[
             {
                 "role": "system",
-                "content": (
-                    "You convert structured weekly digests into engaging, conversational podcast scripts "
-                    "optimised for text-to-speech narration. Write as if a knowledgeable, enthusiastic colleague "
-                    "is briefing a busy support leader over coffee — warm, clear, and energising. "
-                    "Tone: constructive and forward-looking. Lead with opportunities and exciting developments. "
-                    "When covering risks, be factual and solution-oriented — never alarmist or dramatic. "
-                    "No bullet symbols, no markdown — pure flowing spoken prose."
-                ),
+                "content": system_persona,
             },
             {
                 "role": "user",
                 "content": (
                     f"Convert this {label} digest into a podcast script (target: ~1500 words, ~10 min spoken).\n\n"
-                    f"Opening line: \"Welcome to your Weekly Customer Support AI Digest. "
-                    f"I'm covering the week of {WEEK_DISPLAY}. There's a lot of exciting stuff this week, so let's dive in.\"\n\n"
+                    f"Opening line: \"{opening_line}\"\n\n"
                     "Follow this narrative flow:\n"
-                    "1. Start with what customers are telling us they value right now — set the context for why this week's news matters.\n"
-                    "2. Cover the top AI opportunities and new capabilities — be enthusiastic and concrete about what's possible.\n"
-                    "3. Address the key risks and mitigations — be honest and practical, but keep it proportionate and solution-focused.\n"
-                    "4. Close with the top 2–3 actions for the week ahead.\n\n"
+                    f"{narrative_flow}\n\n"
                     "Cover 5 to 6 of the most important items. Mention company names and concrete details. "
                     "Keep the energy positive and forward-looking throughout.\n\n"
                     f"Closing line: \"That's your weekly briefing. The full digest with all sources and detail is "
