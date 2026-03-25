@@ -60,12 +60,15 @@ across Europe and beyond. Each company has its own support team; the group is in
 programme. Key priorities for the organisation in 2026 are:
   1. Ensure every Visma company is actively using AI tools in customer support by end of 2026.
   2. Reach a target where at least 50% of customer support inquiries are resolved using AI.
+  3. Maintain and improve the customer experience, the key metric for this being Customer Satisfaction score (CSAT). 
+To summarise, the priority of implementing and using AI in 2026 should NOT sacrifice customer experience. 
 
 Use this context to:
 - Favour news, case studies, and findings relevant to rolling out AI support tooling at scale across
   multiple autonomous product teams and companies within a larger group.
 - Give extra weight to stories about AI adoption strategies, change management for support teams,
   measuring AI deflection rates, and lessons learned from enterprise-scale rollouts.
+- Give extra weight to stories about research and findings in regards to customer support of SaaS companies, how to maintain and improvee customer satisfaction and organisation efficiency.
 - Frame efficiency and adoption barriers through the lens of a decentralised group (100+ companies)
   rather than a single-company deployment.
 - The audience is sophisticated and already committed to AI in support — skip basics, focus on what
