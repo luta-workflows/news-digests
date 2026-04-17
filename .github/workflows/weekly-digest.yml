@@ -1,15 +1,19 @@
-name: Weekly AI Digest
+name: Bi-weekly AI Digest
 
 on:
   schedule:
-    # Every Monday at 7:00 AM UTC (adjust UTC offset to match your timezone)
-    - cron: "0 4 * * 1"
+    # Every Monday at 1:00 AM UTC — the job itself checks for bi-weekly cadence
+    - cron: "0 1 * * 1"
   workflow_dispatch:
     inputs:
       digest_type:
         description: "Which digest to run (both / cs / cto)"
         required: false
         default: "both"
+      force_run:
+        description: "Run even if not a scheduled bi-weekly date"
+        required: false
+        default: "false"
 
 permissions:
   contents: read
@@ -20,15 +24,44 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: Check bi-weekly schedule
+        id: schedule_check
+        run: |
+          # Reference date: April 27, 2026 (first scheduled run)
+          REFERENCE_DATE="2026-04-27"
+          TODAY=$(date -u +%Y-%m-%d)
+          
+          # Calculate days since reference date
+          REF_EPOCH=$(date -d "$REFERENCE_DATE" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$REFERENCE_DATE" +%s)
+          TODAY_EPOCH=$(date -d "$TODAY" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$TODAY" +%s)
+          DAYS_DIFF=$(( (TODAY_EPOCH - REF_EPOCH) / 86400 ))
+          WEEKS_DIFF=$(( DAYS_DIFF / 7 ))
+          
+          echo "Reference: $REFERENCE_DATE, Today: $TODAY"
+          echo "Days since reference: $DAYS_DIFF, Weeks: $WEEKS_DIFF"
+          
+          # Run if weeks since reference is even (0, 2, 4, ...) OR if force_run is true
+          FORCE_RUN="${{ github.event.inputs.force_run || 'false' }}"
+          if [[ "$FORCE_RUN" == "true" ]] || [[ $(( WEEKS_DIFF % 2 )) -eq 0 && $DAYS_DIFF -ge 0 ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "✓ This is a scheduled bi-weekly run (or forced)"
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "⏭ Skipping — not a bi-weekly run date"
+          fi
+
       - name: Checkout repository
+        if: steps.schedule_check.outputs.should_run == 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python 3.11
+        if: steps.schedule_check.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Cache pip packages
+        if: steps.schedule_check.outputs.should_run == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
@@ -37,9 +70,11 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
+        if: steps.schedule_check.outputs.should_run == 'true'
         run: pip install -r scripts/requirements.txt
 
       - name: Generate and send digests
+        if: steps.schedule_check.outputs.should_run == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}

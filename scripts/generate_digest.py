@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Weekly AI Digest Generator
+Bi-weekly AI Digest Generator
 
-Runs in GitHub Actions every Monday morning.
+Runs in GitHub Actions every two weeks (starting April 27, 2026).
 Produces two digests (CS Leadership & CTO/Engineering), each with:
   - A short HTML email summary with top stories
   - A full structured HTML document attachment (links preserved)
   - An MP3 podcast audio file hosted on DigitalOcean Spaces
 
-News research uses Tavily Search API (real-time web search, last 7 days).
+News research uses Tavily Search API (real-time web search, last 14 days).
 Content generation, podcast scripting, and TTS use OpenAI.
 """
 
@@ -18,7 +18,7 @@ import time
 import smtplib
 import requests
 import markdown2
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
@@ -28,8 +28,13 @@ openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]
 
 NOW = datetime.utcnow()
-WEEK_DATE = NOW.strftime("%Y-%m-%d")
-WEEK_DISPLAY = NOW.strftime("%B %d, %Y")
+DIGEST_DATE = NOW.strftime("%Y-%m-%d")
+DIGEST_DISPLAY = NOW.strftime("%B %d, %Y")
+PREVIOUS_DIGEST_DATE = (NOW - timedelta(days=14)).strftime("%B %d, %Y")
+
+# Legacy aliases for backward compatibility
+WEEK_DATE = DIGEST_DATE
+WEEK_DISPLAY = DIGEST_DISPLAY
 
 # ── Model configuration ────────────────────────────────────────────────────────
 # Digest generation is the highest-value step — use the best available model.
@@ -114,7 +119,7 @@ CTO_SEARCH_QUERIES = [
 
 # ── System prompts ─────────────────────────────────────────────────────────────
 
-CS_SYSTEM_PROMPT = f"""You are an expert analyst creating a weekly digest for a Customer Support Leadership team at a SaaS company. Your audience is customer support leaders — VPs of Support, Head of CX, Support Operations leads — who want to stay ahead of both the exciting opportunities and the real risks in their field.
+CS_SYSTEM_PROMPT = f"""You are an expert analyst creating a bi-weekly digest for a Customer Support Leadership team at a SaaS company. Your audience is customer support leaders — VPs of Support, Head of CX, Support Operations leads — who want to stay ahead of both the exciting opportunities and the real risks in their field.
 {CS_ORG_CONTEXT}
 
 AUDIENCE FOCUS: SaaS customer support leadership. Frame everything through the lens of day-to-day support operations, team efficiency, and the customer experience delivered by support teams. This is NOT a general "Customer Success" digest — it is specifically about customer support.
@@ -154,19 +159,19 @@ REQUIRED ADDITIONAL SECTIONS (in this order):
 The top 3–5 most impactful AI-powered improvements available *today* for SaaS support teams: new tools, new capabilities, or proven use cases that can meaningfully improve efficiency or customer experience.
 
 ### Key Risks & Mitigation Playbook
-A concise consolidated view of the most important risks identified this week, paired with specific mitigations. Keep this proportionate — if it was a quiet week for risks, say so.
+A concise consolidated view of the most important risks identified in the past two weeks, paired with specific mitigations. Keep this proportionate — if it was a quiet period for risks, say so.
 
-### What To Do Next Week
+### Actions for the Next Two Weeks
 3–5 concrete, prioritised actions for a support leader — at least two should be opportunity-capturing, not just risk-mitigation.
 
 ### Vendor Capability Snapshot
-Short summary of notable support-platform releases and updates this week (Intercom, Zendesk, Salesforce, HubSpot, Freshdesk, etc.), with hyperlinks.
+Short summary of notable support-platform releases and updates from the past two weeks (Intercom, Zendesk, Salesforce, HubSpot, Freshdesk, etc.), with hyperlinks.
 
 TONE: Forward-looking, constructive, and energising alongside being rigorous and action-oriented. Match the enthusiasm of the opportunities with the pragmatism of the risks. No hype, but no unnecessary alarm either. Write as a trusted advisor who believes AI can genuinely improve support — while being honest about the pitfalls.
 FORMAT: Well-structured Markdown. Embed hyperlinks to sources inline using [text](url) format. Do not invent URLs — only use URLs from the research provided.
 """
 
-CTO_SYSTEM_PROMPT = f"""You are an expert analyst creating a weekly AI news digest for a SaaS CTO and hands-on software engineer.
+CTO_SYSTEM_PROMPT = f"""You are an expert analyst creating a bi-weekly AI news digest for a SaaS CTO and hands-on software engineer.
 
 BALANCE REQUIREMENT: This digest must be genuinely balanced between opportunities and risks. Lead with what is genuinely exciting and useful — new capabilities, productivity gains, architectural patterns that work well in practice. Risks and quality notes are important but should be proportionate: flag them clearly when they matter, but do not let caution dominate a week where the headline story is a real breakthrough.
 
@@ -185,7 +190,7 @@ For EACH news item, include ALL of the following (use Markdown headers and bulle
 5. **Risk / Quality Note** *(only if a genuine concern exists — skip if the story is straightforwardly positive)*
    - Failure modes, gotchas, where it breaks
    - Severity: High / Med / Low
-6. **Quick Experiment Idea** – a small, practical test worth running this week
+6. **Quick Experiment Idea** – a small, practical test worth running soon
 7. **Impact Score** – High / Med / Low
 8. **Confidence Level** – High / Med / Low
 
@@ -193,19 +198,19 @@ Order items by overall engineering value: highest genuine upside first. Risk-onl
 
 REQUIRED ADDITIONAL SECTIONS (in this order):
 
-### What's Worth Your Attention This Week
-2–3 sentences on the single most significant development across all the week's news — the thing a busy engineer absolutely should not miss.
+### What's Worth Your Attention
+2–3 sentences on the single most significant development from the past two weeks — the thing a busy engineer absolutely should not miss.
 
 ### Recommended Experiments
-3–5 concrete, low-effort experiments that can be kicked off immediately to validate or take advantage of this week's developments.
+3–5 concrete, low-effort experiments that can be kicked off immediately to validate or take advantage of recent developments.
 
 ### Key Risks & Mitigations
-Concise consolidated view of the most important risks or quality concerns from this week, with specific mitigations. Keep this proportionate — if it was a quiet week for risks, say so briefly.
+Concise consolidated view of the most important risks or quality concerns from the past two weeks, with specific mitigations. Keep this proportionate — if it was a quiet period for risks, say so briefly.
 
 ### Tooling Watchlist
-Brief list of notable releases, updates, or tools worth tracking this week, with hyperlinks.
+Brief list of notable releases, updates, or tools worth tracking from the past two weeks, with hyperlinks.
 
-TONE: Engineering-first and reality-based — genuinely enthusiastic about real breakthroughs, appropriately skeptical of hype, focused on tradeoffs. Match the energy to the week: if something is a genuine leap forward, say so clearly. No vendor marketing language, but also no reflexive cynicism.
+TONE: Engineering-first and reality-based — genuinely enthusiastic about real breakthroughs, appropriately skeptical of hype, focused on tradeoffs. Match the energy to the content: if something is a genuine leap forward, say so clearly. No vendor marketing language, but also no reflexive cynicism.
 FORMAT: Well-structured Markdown. Embed hyperlinks to sources inline using [text](url) format. Do not invent URLs — only use URLs from the research provided.
 """
 
@@ -248,18 +253,18 @@ EMAIL_HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
 <div class="wrapper">
   <div class="header">
-    <div class="header-eyebrow">Weekly AI Digest</div>
+    <div class="header-eyebrow">Bi-weekly AI Digest</div>
     <h1>{title}</h1>
-    <div class="header-meta">Week of {week_display} &nbsp;·&nbsp; {story_count} stories this week</div>
+    <div class="header-meta">Period ending {week_display} &nbsp;·&nbsp; {story_count} stories this period</div>
   </div>
 
   <div class="body">
     <p class="intro">
-      Your weekly briefing on what customers value, AI opportunities for support teams, and key risks to watch.
+      Your bi-weekly briefing on what customers value, AI opportunities for support teams, and key risks to watch.
       Below are the top stories — the full structured digest with all sources and detail is attached as an HTML document.
     </p>
 
-    <div class="section-label">Top Stories This Week</div>
+    <div class="section-label">Top Stories This Period</div>
     {story_cards_html}
 
     <hr class="divider">
@@ -276,7 +281,7 @@ EMAIL_HTML_TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="footer">
-    This digest is auto-generated every Monday via GitHub Actions using OpenAI.<br>
+    This digest is auto-generated bi-weekly via GitHub Actions using OpenAI.<br>
     Sources are embedded as hyperlinks in the attached HTML document.
   </div>
 </div>
@@ -327,9 +332,9 @@ def chunk_text_for_tts(text: str, max_chars: int = 4000) -> list[str]:
 def research_news(queries: list[str]) -> str:
     """
     Gather recent news using the Tavily Search API.
-    Restricts results to the past 7 days so all content is current.
+    Uses 'month' time range to capture ~14 days of content for bi-weekly digests.
     Returns a formatted string of search results with titles, URLs, and content snippets
-    ready to be passed to GPT-4o for digest generation.
+    ready to be passed to GPT for digest generation.
     """
     all_results: list[str] = []
 
@@ -342,9 +347,9 @@ def research_news(queries: list[str]) -> str:
                     "api_key": TAVILY_API_KEY,
                     "query": query,
                     "search_depth": "advanced",   # deeper crawl, more relevant results
-                    "max_results": 6,
+                    "max_results": 10,             # increased for bi-weekly coverage
                     "topic": "news",               # target news sources; adds published_date metadata
-                    "time_range": "week",          # only the past 7 days
+                    "time_range": "month",         # covers past ~30 days; model filters to last 14
                     "include_answer": True,        # Tavily's own AI summary of results
                     "include_raw_content": False,
                 },
@@ -405,8 +410,8 @@ def generate_full_digest(digest_type: str, research: str) -> str:
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": (
-                f"Create the complete Weekly AI Digest for {label} covering the week of {WEEK_DISPLAY}.\n\n"
-                f"Here is the web research gathered for this week:\n\n{research}\n\n"
+                f"Create the complete Bi-weekly AI Digest for {label} covering the two weeks ending {DIGEST_DISPLAY}.\n\n"
+                f"Here is the web research gathered for the past two weeks:\n\n{research}\n\n"
                 "Generate a complete, well-structured digest following the required format exactly. "
                 "Include all required sections and all required fields per news item. "
                 "Use real company names, real products, and real incidents from the research above. "
@@ -479,37 +484,42 @@ def generate_short_summary(full_digest: str, digest_type: str) -> list[dict]:
     try:
         return json.loads(raw)
     except Exception:
-        return [{"title": "Weekly AI Digest Ready", "summary": "See the attached document for this week's full digest with all stories and sources."}]
+        return [{"title": "Bi-weekly AI Digest Ready", "summary": "See the attached document for this period's full digest with all stories and sources."}]
 
 
 def generate_podcast_script(full_digest: str, digest_type: str) -> str:
-    """Generate a conversational podcast script for TTS narration (~10 min / ~1500 words)."""
+    """Generate a conversational podcast script for TTS narration (~10-12 min / ~1800 words)."""
     label = "Customer Support Leadership" if digest_type == "cs" else "Software Engineering and CTO"
     print(f"    Generating podcast script with {MODEL_AUXILIARY}...")
     print(f"    Digest input: {len(full_digest):,} chars sent to model")
 
     if digest_type == "cs":
         system_persona = (
-            "You convert structured weekly digests into engaging, conversational podcast scripts "
+            "You convert structured bi-weekly digests into engaging, conversational podcast scripts "
             "optimised for text-to-speech narration. Write as if a knowledgeable, enthusiastic colleague "
             "is briefing a busy customer support leader over coffee — warm, clear, and energising. "
             "Tone: constructive and forward-looking. Lead with opportunities and exciting developments. "
             "When covering risks, be factual and solution-oriented — never alarmist or dramatic. "
-            "No bullet symbols, no markdown — pure flowing spoken prose."
+            "No bullet symbols, no markdown — pure flowing spoken prose. "
+            "IMPORTANT: Vary your opening — do not start with a lengthy passage about customer expectations. "
+            "Keep the intro brief and informative, then dive into the specific news and developments."
         )
-        opening_line = (
-            f"Welcome to your Weekly Customer Support AI Digest. "
-            f"I'm covering the week of {WEEK_DISPLAY}. There's a lot of exciting stuff this week, so let's dive in."
+        opening_guidance = (
+            f"Create a SHORT, VARIED opening (2-3 sentences max) that briefly states what this podcast covers. "
+            f"Example structure: 'This bi-weekly digest covers headlines from customer support since {PREVIOUS_DIGEST_DATE}, "
+            f"including the latest customer expectations, case studies, and practical insights for delivering world-class support.' "
+            f"Then transition immediately into the content — do NOT elaborate on customer expectations philosophy in the intro. "
+            f"Improvise around these lines to keep it fresh each episode."
         )
         narrative_flow = (
-            "1. Start with what customers are telling us they value right now — set the context for why this week's news matters.\n"
-            "2. Cover the top AI opportunities and new capabilities for support teams — be enthusiastic and concrete about what's possible.\n"
-            "3. Address the key risks and mitigations — be honest and practical, but keep it proportionate and solution-focused.\n"
-            "4. Close with the top 2–3 actions for support leaders this week ahead."
+            "1. After the brief intro, lead with the most exciting AI opportunities and new capabilities for support teams.\n"
+            "2. Cover 2-3 notable case studies or success stories from the past two weeks.\n"
+            "3. Briefly touch on any key risks with practical mitigations — keep it proportionate.\n"
+            "4. Wrap up with a forward-looking statement (no need to repeat specific actions — the written digest covers those)."
         )
     else:
         system_persona = (
-            "You convert structured weekly digests into engaging, conversational podcast scripts "
+            "You convert structured bi-weekly digests into engaging, conversational podcast scripts "
             "optimised for text-to-speech narration. Write as if a sharp, pragmatic engineering colleague "
             "is briefing a busy CTO or senior engineer over coffee — direct, technically grounded, and energising. "
             "Tone: reality-based and enthusiastic about genuine breakthroughs, appropriately skeptical of hype. "
@@ -517,15 +527,15 @@ def generate_podcast_script(full_digest: str, digest_type: str) -> str:
             "When covering risks, be concrete and solution-oriented — never alarmist. "
             "No bullet symbols, no markdown — pure flowing spoken prose."
         )
-        opening_line = (
-            f"Welcome to your Weekly Engineering and AI Digest. "
-            f"I'm covering the week of {WEEK_DISPLAY}. There's a lot worth unpacking this week, so let's get into it."
+        opening_guidance = (
+            f"Create a SHORT opening (2-3 sentences max) that states this is the bi-weekly engineering digest "
+            f"covering developments since {PREVIOUS_DIGEST_DATE}. Then dive straight into the content."
         )
         narrative_flow = (
-            "1. Start with the single most significant development this week — the thing a busy engineer should not miss.\n"
+            "1. Start with the single most significant development from the past two weeks — the thing a busy engineer should not miss.\n"
             "2. Cover the top new capabilities, tools, and architectural patterns — be concrete about what they enable.\n"
-            "3. Address the key risks and quality concerns — be honest and practical, proportionate to the week.\n"
-            "4. Close with the top 2–3 experiments or actions worth kicking off this week."
+            "3. Address any key risks and quality concerns — be honest and practical, proportionate to the period.\n"
+            "4. Wrap up with a brief forward-looking statement (no need to list experiments — the written digest covers those)."
         )
 
     response = openai_client.chat.completions.create(
@@ -538,14 +548,15 @@ def generate_podcast_script(full_digest: str, digest_type: str) -> str:
             {
                 "role": "user",
                 "content": (
-                    f"Convert this {label} digest into a podcast script (target: ~1500 words, ~10 min spoken).\n\n"
-                    f"Opening line: \"{opening_line}\"\n\n"
-                    "Follow this narrative flow:\n"
+                    f"Convert this {label} digest into a podcast script (target: ~1800 words, ~12 min spoken).\n\n"
+                    f"OPENING GUIDANCE:\n{opening_guidance}\n\n"
+                    "NARRATIVE FLOW:\n"
                     f"{narrative_flow}\n\n"
-                    "Cover 5 to 6 of the most important items. Mention company names and concrete details. "
+                    "Cover 8 to 10 of the most important items (we have two weeks of content to cover). "
+                    "Mention company names and concrete details. "
                     "Keep the energy positive and forward-looking throughout.\n\n"
-                    f"Closing line: \"That's your weekly briefing. The full digest with all sources and detail is "
-                    f"in your inbox as an attached document. Have a great week — there's a lot to work with.\"\n\n"
+                    "CLOSING: End with something like 'That's your bi-weekly briefing. The full digest with all sources "
+                    "and recommended actions is in your inbox as an attached document. See you in two weeks!'\n\n"
                     f"Digest:\n{full_digest}"
                 ),
             },
@@ -629,7 +640,7 @@ def markdown_to_html(md_text: str, title: str) -> str:
 </head>
 <body>
 <h1>{title}</h1>
-<p class="meta">Generated {WEEK_DISPLAY} &nbsp;·&nbsp; Weekly AI Digest</p>
+<p class="meta">Generated {DIGEST_DISPLAY} &nbsp;·&nbsp; Bi-weekly AI Digest</p>
 {body_html}
 </body>
 </html>"""
@@ -703,7 +714,7 @@ def send_email(
         header_bg = "#14532d"
         accent = "#16a34a"
 
-    full_title = f"Weekly AI Digest – {title}"
+    full_title = f"Bi-weekly AI Digest – {title}"
     subject = f"{full_title} | Week of {WEEK_DISPLAY}"
     attachment_name = f"AI-Digest-{'CS' if digest_type == 'cs' else 'CTO'}-{WEEK_DATE}.html"
 
@@ -788,9 +799,9 @@ def run_digest(
 
     print("\n[7/7] Preparing HTML document and sending email...")
     if digest_type == "cs":
-        doc_title = f"Weekly AI Digest – Customer Support Leadership | {WEEK_DISPLAY}"
+        doc_title = f"Bi-weekly AI Digest – Customer Support Leadership | {DIGEST_DISPLAY}"
     else:
-        doc_title = f"Weekly AI Digest – Engineering & CTO | {WEEK_DISPLAY}"
+        doc_title = f"Bi-weekly AI Digest – Engineering & CTO | {DIGEST_DISPLAY}"
     full_digest_html = markdown_to_html(full_digest_md, doc_title)
 
     send_email(
@@ -816,7 +827,7 @@ def main() -> None:
     spaces_region = os.environ["DO_SPACES_REGION"]
     spaces_bucket = os.environ["DO_SPACES_BUCKET"]
 
-    print(f"\nWeekly AI Digest Generator")
+    print(f"\nBi-weekly AI Digest Generator")
     print(f"Week of: {WEEK_DISPLAY}")
     print(f"Digest(s): {digest_type}")
 
