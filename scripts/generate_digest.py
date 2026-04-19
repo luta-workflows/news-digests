@@ -99,13 +99,18 @@ HUMAN-IN-THE-LOOP PHILOSOPHY:
 # ── Search queries ─────────────────────────────────────────────────────────────
 
 CS_SEARCH_QUERIES = [
-    f"what customers value most in customer service expectations trends SaaS {NOW.year}",
-    f"AI customer support efficiency gains success stories SaaS companies {NOW.year}",
-    f"Intercom Fin Zendesk AI Salesforce Einstein HubSpot Breeze new features customer support {NOW.year}",
-    f"AI agent automation customer support new capabilities opportunities {NOW.year}",
-    f"AI customer support risks hallucination mitigation strategies SaaS {NOW.year}",
-    f"customer support personalization self-service CSAT NPS improvement AI {NOW.year}",
-    f"enterprise AI support rollout adoption deflection rate scaling multiple teams {NOW.year}",
+    # Customer expectations & non-AI CX research (no AI framing — keeps results diverse)
+    f"customer expectations service quality resolution speed empathy research survey SaaS {NOW.year}",
+    f"customer support team management workforce skills coaching quality assurance {NOW.year}",
+    f"customer support CSAT NPS first contact resolution benchmarks industry data Europe {NOW.year}",
+    # Platform updates — naturally covers both AI and non-AI capabilities
+    f"Intercom Zendesk Salesforce HubSpot Freshdesk customer support platform new features updates {NOW.year}",
+    # Self-service & knowledge — growing non-AI pillar
+    f"customer self-service knowledge base community forum deflection trends SaaS {NOW.year}",
+    # AI opportunities (kept, but now balanced against non-AI queries above)
+    f"AI customer support automation efficiency success stories enterprise case study {NOW.year}",
+    f"AI customer support risks oversight hallucination escalation mitigation strategies {NOW.year}",
+    f"enterprise AI customer support adoption rollout change management multiple teams {NOW.year}",
 ]
 
 CTO_SEARCH_QUERIES = [
@@ -125,6 +130,8 @@ CS_SYSTEM_PROMPT = f"""You are an expert analyst creating a bi-weekly digest for
 AUDIENCE FOCUS: SaaS customer support leadership. Frame everything through the lens of day-to-day support operations, team efficiency, and the customer experience delivered by support teams. This is NOT a general "Customer Success" digest — it is specifically about customer support.
 
 BALANCE REQUIREMENT: This digest must be genuinely balanced. Lead with what is exciting and possible, not with what is scary. Opportunities and new capabilities should receive equal or greater emphasis than risks. Risks must be concrete, actionable, and paired with clear mitigations — not presented as doom-and-gloom.
+
+TOPIC DIVERSITY: Across the 5–8 main news items, no more than half should focus primarily on AI tools or AI capabilities. Reserve at least 2–3 items for non-AI customer support topics: customer expectations research, workforce and team management, CX quality strategy, operational best practices, or platform feature updates where the primary angle is not AI. Great support requires both smart tooling AND well-managed, skilled teams — do not let the digest become an AI newsletter. If the research genuinely only produced AI-related news this period, note that explicitly rather than forcing non-AI framing.
 
 STRUCTURE PHILOSOPHY:
 1. Start with what customers need and value (the goal)
@@ -163,6 +170,14 @@ A concise consolidated view of the most important risks identified in the past t
 
 ### Actions for the Next Two Weeks
 3–5 concrete, prioritised actions for a support leader — at least two should be opportunity-capturing, not just risk-mitigation.
+
+For EACH action, add an **Effort** tag immediately after the action title:
+- **Quick Win** — can be done this week, no approval needed (e.g. review a dashboard, share an article with the team, run a one-question survey)
+- **This Sprint** — achievable within the two-week window with light coordination (e.g. run a retrospective, trial a new feature, update a knowledge base section)
+- **Requires Planning** — complex or needs team/budget buy-in (1–3 months); for these, define ONLY the specific first step achievable in the next 2 weeks (e.g. "Map your current escalation rate by category" rather than "Redesign the escalation workflow")
+- **Long-term Initiative** — strategic, multi-quarter effort; again, define only the concrete first step
+
+IMPORTANT scoping rule: The actions list should be dominated by Quick Win and This Sprint items. Every support leader reading this is busy — actions that feel impossible to start in two weeks will be ignored. If a genuinely important topic requires a Long-term Initiative, frame the action as "Start the conversation: schedule a 30-minute review of X with your team" rather than "Implement Y."
 
 ### Vendor Capability Snapshot
 Short summary of notable support-platform releases and updates from the past two weeks (Intercom, Zendesk, Salesforce, HubSpot, Freshdesk, etc.), with hyperlinks.
@@ -332,7 +347,9 @@ def chunk_text_for_tts(text: str, max_chars: int = 4000) -> list[str]:
 def research_news(queries: list[str]) -> str:
     """
     Gather recent news using the Tavily Search API.
-    Uses 'month' time range to capture ~14 days of content for bi-weekly digests.
+    Uses a 15-day window (days=15) to exactly match the bi-weekly cadence — every
+    article returned is genuinely new since the previous run, eliminating the overlap
+    that 'month' caused (which returned the same pool of articles on consecutive runs).
     Returns a formatted string of search results with titles, URLs, and content snippets
     ready to be passed to GPT for digest generation.
     """
@@ -347,9 +364,9 @@ def research_news(queries: list[str]) -> str:
                     "api_key": TAVILY_API_KEY,
                     "query": query,
                     "search_depth": "advanced",   # deeper crawl, more relevant results
-                    "max_results": 10,             # increased for bi-weekly coverage
+                    "max_results": 12,             # slightly higher to compensate for tighter date window
                     "topic": "news",               # target news sources; adds published_date metadata
-                    "time_range": "month",         # covers past ~30 days; model filters to last 14
+                    "days": 15,                    # exactly matches the bi-weekly cadence; every result is genuinely new
                     "include_answer": True,        # Tavily's own AI summary of results
                     "include_raw_content": False,
                 },
@@ -398,20 +415,38 @@ def research_news(queries: list[str]) -> str:
     return "\n\n---\n\n".join(all_results)
 
 
-def generate_full_digest(digest_type: str, research: str) -> str:
-    """Generate the full structured digest in Markdown."""
+def generate_full_digest(digest_type: str, research: str, previous_context: str = "") -> str:
+    """Generate the full structured digest in Markdown.
+
+    `previous_context` is an optional compact summary of the last 1–3 digests,
+    used to steer the model away from repeating topics or stale action suggestions.
+    """
     system = CS_SYSTEM_PROMPT if digest_type == "cs" else CTO_SYSTEM_PROMPT
     label = "Customer Support Leadership" if digest_type == "cs" else "Software Engineering / CTO"
 
+    history_block = ""
+    if previous_context:
+        history_block = (
+            f"\n\n{previous_context}\n\n"
+            "INSTRUCTION: Do not repeat news items or action suggestions already covered in "
+            "the previous digests above. Choose different angles, newer developments, or "
+            "topics not yet featured. If a topic from a previous digest has a significant "
+            "new development this period, you may cover it — but acknowledge the update "
+            "explicitly rather than repeating the same framing.\n"
+        )
+
     print(f"    Generating full digest with {MODEL_DIGEST}...")
     print(f"    Research input: {len(research):,} chars sent to model")
+    if previous_context:
+        print(f"    Historical context: {len(previous_context):,} chars injected")
     response = openai_client.chat.completions.create(
         model=MODEL_DIGEST,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": (
                 f"Create the complete Bi-weekly AI Digest for {label} covering the two weeks ending {DIGEST_DISPLAY}.\n\n"
-                f"Here is the web research gathered for the past two weeks:\n\n{research}\n\n"
+                f"Here is the web research gathered for the past two weeks:\n\n{research}"
+                f"{history_block}\n\n"
                 "Generate a complete, well-structured digest following the required format exactly. "
                 "Include all required sections and all required fields per news item. "
                 "Use real company names, real products, and real incidents from the research above. "
@@ -648,6 +683,20 @@ def markdown_to_html(md_text: str, title: str) -> str:
 
 # ── DigitalOcean Spaces helpers ────────────────────────────────────────────────
 
+def _get_spaces_client(spaces_key: str, spaces_secret: str, spaces_region: str):
+    """Create and return a boto3 S3 client configured for DigitalOcean Spaces."""
+    import boto3
+    from botocore.client import Config
+    return boto3.client(
+        "s3",
+        region_name=spaces_region,
+        endpoint_url=f"https://{spaces_region}.digitaloceanspaces.com",
+        aws_access_key_id=spaces_key,
+        aws_secret_access_key=spaces_secret,
+        config=Config(signature_version="s3v4"),
+    )
+
+
 def upload_to_spaces(
     content: bytes,
     filename: str,
@@ -656,28 +705,138 @@ def upload_to_spaces(
     spaces_region: str,
     spaces_bucket: str,
     folder: str = "blog-public-content",
+    content_type: str = "audio/mpeg",
+    public: bool = True,
 ) -> str:
-    """Upload audio bytes to DigitalOcean Spaces. Returns the public CDN URL."""
-    import boto3
-    from botocore.client import Config
-
-    client = boto3.client(
-        "s3",
-        region_name=spaces_region,
-        endpoint_url=f"https://{spaces_region}.digitaloceanspaces.com",
-        aws_access_key_id=spaces_key,
-        aws_secret_access_key=spaces_secret,
-        config=Config(signature_version="s3v4"),
-    )
+    """Upload bytes to DigitalOcean Spaces. Returns the public CDN URL."""
+    client = _get_spaces_client(spaces_key, spaces_secret, spaces_region)
     object_key = f"{folder}/{filename}"
-    client.put_object(
+    put_kwargs = dict(
         Bucket=spaces_bucket,
         Key=object_key,
         Body=content,
-        ContentType="audio/mpeg",
-        ACL="public-read",
+        ContentType=content_type,
     )
+    if public:
+        put_kwargs["ACL"] = "public-read"
+    client.put_object(**put_kwargs)
     return f"https://{spaces_bucket}.{spaces_region}.digitaloceanspaces.com/{object_key}"
+
+
+# ── Historical digest helpers ──────────────────────────────────────────────────
+
+# Known section headings produced by the digest prompts — used to distinguish
+# structural section titles from actual news-item headlines when parsing previous digests.
+_DIGEST_SECTION_NAMES = {
+    "What Customers Value Right Now",
+    "AI Opportunities Spotlight",
+    "Key Risks & Mitigation Playbook",
+    "Actions for the Next Two Weeks",
+    "Vendor Capability Snapshot",
+    "What's Worth Your Attention",
+    "Recommended Experiments",
+    "Key Risks & Mitigations",
+    "Tooling Watchlist",
+}
+
+
+def _extract_digest_summary(md_text: str, date_str: str) -> str:
+    """
+    Pull the news-item headlines and "Actions for the Next Two Weeks" bullet list
+    out of a previous digest's Markdown text.  Returns a compact plain-text summary
+    suitable for injecting into the next generation prompt as historical context.
+    """
+    lines = md_text.split("\n")
+    news_headlines: list[str] = []
+    actions_lines: list[str] = []
+    in_actions = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        if line.startswith("### "):
+            heading = line.lstrip("# ").strip()
+            is_section = any(s in heading for s in _DIGEST_SECTION_NAMES)
+            if not is_section and heading:
+                news_headlines.append(heading)
+            # Leaving the actions section when we hit any heading
+            in_actions = "Actions for the Next Two Weeks" in line
+
+        elif line.startswith("## "):
+            in_actions = False
+
+        elif in_actions and stripped and not stripped.startswith("#"):
+            actions_lines.append(stripped)
+            if len(actions_lines) >= 12:
+                in_actions = False
+
+    parts = [f"DIGEST FROM {date_str}:"]
+    if news_headlines:
+        parts.append("Topics covered:")
+        for h in news_headlines[:8]:
+            parts.append(f"  - {h}")
+    if actions_lines:
+        parts.append("Actions previously recommended:")
+        for a in actions_lines[:8]:
+            parts.append(f"  {a}")
+
+    return "\n".join(parts)
+
+
+def fetch_previous_digest_context(
+    digest_type: str,
+    spaces_key: str,
+    spaces_secret: str,
+    spaces_region: str,
+    spaces_bucket: str,
+    n: int = 3,
+) -> str:
+    """
+    Download the last `n` Markdown digests for `digest_type` ('cs' or 'cto') from
+    DigitalOcean Spaces and return a compact summary of the topics and actions they
+    covered.  Returns an empty string if no previous digests exist yet.
+
+    Digests are stored under the key prefix  digests/<type>/digest-<type>-<YYYY-MM-DD>.md
+    """
+    try:
+        client = _get_spaces_client(spaces_key, spaces_secret, spaces_region)
+        prefix = f"digests/{digest_type}/digest-{digest_type}-"
+        response = client.list_objects_v2(Bucket=spaces_bucket, Prefix=prefix)
+
+        if "Contents" not in response or not response["Contents"]:
+            print("    No previous digests found in Spaces — skipping historical context.")
+            return ""
+
+        # Sort descending by date (the key name contains YYYY-MM-DD so lexicographic works)
+        objects = sorted(
+            response["Contents"], key=lambda x: x["Key"], reverse=True
+        )[:n]
+
+        summaries: list[str] = []
+        for obj in objects:
+            key = obj["Key"]
+            date_match = key.rsplit("-", 3)  # e.g. ['...digest-cs', '2026', '03', '19.md']
+            date_str = "-".join(date_match[-3:]).rstrip(".md") if len(date_match) >= 3 else key
+            print(f"    Fetching previous digest: {key}")
+            obj_data = client.get_object(Bucket=spaces_bucket, Key=key)
+            md_text = obj_data["Body"].read().decode("utf-8")
+            summaries.append(_extract_digest_summary(md_text, date_str))
+
+        if not summaries:
+            return ""
+
+        context = (
+            "PREVIOUSLY COVERED CONTENT (last 1–3 digests):\n"
+            "Use this to avoid repeating the same news items, topics, or action suggestions. "
+            "Select different angles, newer developments, or unexplored areas instead.\n\n"
+            + "\n\n---\n\n".join(summaries)
+        )
+        print(f"    Historical context loaded: {len(summaries)} previous digest(s), {len(context):,} chars")
+        return context
+
+    except Exception as e:
+        print(f"    Warning: Could not load previous digest context: {e}")
+        return ""
 
 
 # ── Email builder ──────────────────────────────────────────────────────────────
@@ -769,35 +928,57 @@ def run_digest(
     print(f"  Generating {label} Digest")
     print(f"{'=' * 55}")
 
-    print("\n[1/7] Researching news via web search...")
+    dtype = "cs" if digest_type == "cs" else "cto"
+
+    print("\n[1/8] Loading historical digest context from Spaces...")
+    previous_context = fetch_previous_digest_context(
+        digest_type, spaces_key, spaces_secret, spaces_region, spaces_bucket
+    )
+
+    print("\n[2/8] Researching news via web search...")
     queries = CS_SEARCH_QUERIES if digest_type == "cs" else CTO_SEARCH_QUERIES
     research = research_news(queries)
     print(f"    Research gathered: {len(research):,} chars")
 
-    print("\n[2/7] Generating full structured digest...")
+    print("\n[3/8] Generating full structured digest...")
     # validate_content_length is called inside generate_full_digest — will raise on failure.
-    full_digest_md = generate_full_digest(digest_type, research)
+    full_digest_md = generate_full_digest(digest_type, research, previous_context)
 
-    print("\n[3/7] Extracting top stories for email summary...")
+    print("\n[4/8] Storing digest Markdown in Spaces for future context...")
+    md_filename = f"digest-{dtype}-{DIGEST_DATE}.md"
+    try:
+        upload_to_spaces(
+            full_digest_md.encode("utf-8"),
+            md_filename,
+            spaces_key, spaces_secret, spaces_region, spaces_bucket,
+            folder=f"digests/{dtype}",
+            content_type="text/markdown; charset=utf-8",
+            public=False,
+        )
+        print(f"    Markdown stored: digests/{dtype}/{md_filename}")
+    except Exception as e:
+        print(f"    Warning: Could not store digest Markdown: {e}")
+
+    print("\n[5/8] Extracting top stories for email summary...")
     short_items = generate_short_summary(full_digest_md, digest_type)
     print(f"    Extracted {len(short_items)} story item(s)")
 
-    print("\n[4/7] Writing podcast script...")
+    print("\n[6/8] Writing podcast script...")
     # validate_content_length is called inside generate_podcast_script — will raise on failure.
     podcast_script = generate_podcast_script(full_digest_md, digest_type)
 
-    print("\n[5/7] Generating TTS audio...")
+    print("\n[7/8] Generating TTS audio...")
     audio_bytes = generate_audio(podcast_script)
 
-    print("\n[6/7] Uploading audio to DigitalOcean Spaces...")
-    audio_filename = f"digest-{'cs' if digest_type == 'cs' else 'cto'}-{WEEK_DATE}.mp3"
+    print("\n[8/8] Uploading audio to DigitalOcean Spaces, building HTML, and sending email...")
+    audio_filename = f"digest-{dtype}-{WEEK_DATE}.mp3"
     audio_url = upload_to_spaces(
         audio_bytes, audio_filename,
         spaces_key, spaces_secret, spaces_region, spaces_bucket,
     )
     print(f"    Audio URL: {audio_url}")
 
-    print("\n[7/7] Preparing HTML document and sending email...")
+    print("    Preparing HTML document and sending email...")
     if digest_type == "cs":
         doc_title = f"Bi-weekly AI Digest – Customer Support Leadership | {DIGEST_DISPLAY}"
     else:
